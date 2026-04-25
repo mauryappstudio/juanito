@@ -130,6 +130,9 @@ const S={
 // ════════════════════════════════════════════
 // APP
 // ════════════════════════════════════════════
+const KEY_BANCO = 'j_banco_v1';
+const KEY_PAGO  = 'j_pago_v1';
+
 function App(){
   // ─ Productos y claves ─
   const [prods,setProds] = useState(()=>ls(KEY_MIN,MINS0));
@@ -197,8 +200,15 @@ function App(){
   const [nFecha,setNFecha]       = useState('');
   const [renovMsg,setRenovMsg]   = useState('');
 
-  // ─ Estados datos pago editables ─
-  const KEY_PAGO = 'j_pago_v1';
+  // ─ Cuenta bancaria del negocio (editable por Juanito) ─
+  const [bancNeg,setBancNeg] = useState(()=>ls(KEY_BANCO,{nombre:'',banco:'',tipo:'',cuenta:'',transferencia:true}));
+  const [editBanco,setEditBanco] = useState(false);
+  const [bancoForm,setBancoForm] = useState(bancNeg);
+  useEffect(()=>lss(KEY_BANCO,bancNeg),[bancNeg]);
+
+  // ─ Comprobante pago ─
+  const [comprobante,setComprobante] = useState(null);
+  const [comprobanteB64,setComprobanteB64] = useState('');
   const [pagoEdit,setPagoEdit] = useState(()=>ls(KEY_PAGO,PAGO));
   const [editandoPago,setEditandoPago] = useState(false);
   const [pagoForm,setPagoForm] = useState(pagoEdit);
@@ -293,6 +303,15 @@ function App(){
   };
 
   // ─ WhatsApp ─
+  const leerComprobante = e => {
+    const file = e.target.files[0];
+    if(!file) return;
+    setComprobante(file.name);
+    const reader = new FileReader();
+    reader.onload = ev => setComprobanteB64(ev.target.result);
+    reader.readAsDataURL(file);
+  };
+
   const enviar=()=>{
     const lM=Object.entries(cart).map(([id,it])=>{const p=prods.find(x=>x.id===+id);if(!p)return'';const{label,subtotal}=calcItem(p,it);return'  * '+p.emoji+' '+p.nombre+': '+label+' = '+fmt(subtotal);}).filter(Boolean);
     const lY=Object.entries(cartM).map(([id,it])=>{const p=mays.find(x=>x.id===+id);if(!p)return'';return'  * '+p.emoji+' '+p.nombre+': '+it.cantidad+' x '+p.unidad+(p.precio>0?' = '+fmt(p.precio*it.cantidad):'');}).filter(Boolean);
@@ -302,8 +321,12 @@ function App(){
     if(lY.length)msg+='\n\nMayorista:\n'+lY.join('\n');
     msg+='\n\nTOTAL: '+fmt(totalPr);
     if(form.notas)msg+='\n\nNotas: '+form.notas;
+    if(comprobante)msg+='\n\nCOMPROBANTE ADJUNTO: '+comprobante+' (ver imagen adjunta)';
+    else if(bancNeg.cuenta)msg+='\n\n[Cliente sin comprobante adjunto aun]';
     window.open('https://wa.me/'+WA+'?text='+encodeURIComponent(msg),'_blank');
-    setCart({});setCartM({});setForm({nombre:'',telefono:'',direccion:'',horario:'',notas:''});setEnt(null);setPan('ok');
+    setCart({});setCartM({});setForm({nombre:'',telefono:'',direccion:'',horario:'',notas:''});setEnt(null);
+    setComprobante(null);setComprobanteB64('');
+    setPan('ok');
   };
 
   // ─ Componentes reutilizables ─
@@ -567,6 +590,34 @@ function App(){
           Object.entries(cart).map(([id,it])=>{const p=prods.find(x=>x.id===+id);if(!p)return null;const{label,subtotal}=calcItem(p,it);return h('div',{key:id,style:{display:'flex',justifyContent:'space-between',fontSize:'0.88rem',marginBottom:'0.4rem',color:'#b0c8b0'}},h('span',null,p.emoji+' '+p.nombre+' - '+label),h('span',{style:{whiteSpace:'nowrap',marginLeft:'0.5rem'}},fmt(subtotal)));}),
           Object.entries(cartM).map(([id,it])=>{const p=mays.find(x=>x.id===+id);if(!p)return null;return h('div',{key:id,style:{display:'flex',justifyContent:'space-between',fontSize:'0.88rem',marginBottom:'0.4rem',color:'#ffe0b2'}},h('span',null,p.emoji+' '+p.nombre+' - '+it.cantidad+'x'+p.unidad),p.precio>0&&h('span',{style:{whiteSpace:'nowrap',marginLeft:'0.5rem'}},fmt(p.precio*it.cantidad)));}),
           h('div',{style:{display:'flex',justifyContent:'space-between',fontWeight:700,marginTop:'0.7rem',paddingTop:'0.7rem',borderTop:'1px solid #1a321a',color:'#7ec87e'}},h('span',null,'Total estimado'),h('span',null,fmt(totalPr)))
+        ),
+
+        // Datos transferencia del negocio
+        bancNeg.cuenta&&h('div',{style:{background:'#0e1f2a',border:'1px solid #1a3a4a',borderRadius:14,padding:'1rem'}},
+          h('div',{style:{color:'#7ab4e8',fontSize:'0.72rem',textTransform:'uppercase',letterSpacing:'0.1em',marginBottom:'0.7rem'}},'Pago por transferencia'),
+          h('div',{style:{fontSize:'0.85rem',color:'#b0c8b0',lineHeight:2.1}},
+            bancNeg.nombre&&h('div',null,'Nombre: '+bancNeg.nombre),
+            bancNeg.banco&&h('div',null,'Banco: '+bancNeg.banco+(bancNeg.tipo?' - '+bancNeg.tipo:'')),
+            h('div',{style:{fontSize:'0.95rem',fontWeight:700,color:'#f0ebe0'}},'Cuenta: '+bancNeg.cuenta),
+            bancNeg.email&&h('div',null,'Email: '+bancNeg.email)
+          ),
+          h('div',{style:{background:'#0a1a2a',borderRadius:8,padding:'0.5rem 0.8rem',marginTop:'0.5rem',fontSize:'0.78rem',color:'#7ab4e8'}},'Realiza la transferencia y adjunta el comprobante abajo.')
+        ),
+
+        // Adjuntar comprobante
+        h('div',{style:{background:'#0f1f10',border:'1px solid #1a321a',borderRadius:14,padding:'1rem'}},
+          h('div',{style:{color:'#6ec870',fontSize:'0.72rem',textTransform:'uppercase',letterSpacing:'0.1em',marginBottom:'0.7rem'}},'Adjuntar comprobante (opcional)'),
+          h('label',{style:{display:'flex',alignItems:'center',gap:'0.8rem',cursor:'pointer',background:'#162816',border:'2px dashed #243a24',borderRadius:12,padding:'0.8rem 1rem'}},
+            h('span',{style:{fontSize:'1.5rem'}},'📸'),
+            h('div',null,
+              h('div',{style:{fontSize:'0.88rem',color:'#7ec87e',fontWeight:600}},comprobante?'Comprobante listo':'Toca para adjuntar foto'),
+              h('div',{style:{fontSize:'0.75rem',color:'#5a7a5a',marginTop:'0.2rem'}},comprobante?comprobante:'Foto del comprobante de transferencia')
+            ),
+            h('input',{type:'file',accept:'image/*',capture:'environment',onChange:leerComprobante,style:{display:'none'}})
+          ),
+          comprobante&&h('div',{style:{marginTop:'0.6rem',background:'#0d2010',border:'1px solid #1e5a25',borderRadius:8,padding:'0.5rem 0.8rem',fontSize:'0.8rem',color:'#7ec87e',display:'flex',alignItems:'center',gap:'0.5rem'}},
+            h('span',null,'✅'),h('span',null,'Comprobante adjunto - se enviara con el pedido')
+          )
         )
       ),
       h('div',{style:{position:'fixed',bottom:'1.2rem',left:'50%',transform:'translateX(-50%)',width:'calc(100% - 1.8rem)',maxWidth:440,zIndex:20}},
@@ -657,6 +708,30 @@ function App(){
         )
       ),
       !maestro&&h('div',{style:{margin:'0 1rem 0.5rem',marginTop:'0.8rem',background:'#0d2010',border:'1px solid #1e5a25',borderRadius:12,padding:'0.7rem 1rem',fontSize:'0.8rem',color:'#7ec87e'}},'Toca el lapiz para editar. Desactiva si no esta disponible hoy.'),
+
+      // Cuenta bancaria del negocio - solo Juanito
+      !maestro&&h('div',{style:{margin:'0 1rem 0.8rem',background:'#0e1f2a',border:'1px solid #1a3a4a',borderRadius:14,padding:'1rem'}},
+        h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'0.8rem'}},
+          h('div',{style:{color:'#7ab4e8',fontSize:'0.72rem',textTransform:'uppercase',letterSpacing:'0.1em'}},'Mi cuenta bancaria'),
+          h('button',{onClick:()=>{setBancoForm(bancNeg);setEditBanco(!editBanco);},style:{background:'#0a1a2a',border:'1px solid #2a4a6a',borderRadius:8,padding:'0.3rem 0.7rem',color:'#7ab4e8',cursor:'pointer',fontFamily:'inherit',fontSize:'0.75rem'}},editBanco?'Cancelar':'Editar')
+        ),
+        editBanco?h('div',{style:{display:'flex',flexDirection:'column',gap:'0.7rem'}},
+          [{k:'nombre',l:'Nombre titular'},{k:'banco',l:'Banco'},{k:'tipo',l:'Tipo de cuenta'},{k:'cuenta',l:'Numero de cuenta'},{k:'email',l:'Correo electronico'}].map(f=>
+            h('div',{key:f.k},
+              h('div',{style:S.lbl},f.l),
+              h('input',{value:bancoForm[f.k]||'',onChange:e=>setBancoForm(v=>({...v,[f.k]:e.target.value})),placeholder:'Ingresa '+f.l.toLowerCase(),style:{...S.inp,marginTop:'0.3rem',fontSize:'0.88rem'}})
+            )
+          ),
+          h('button',{onClick:()=>{setBancNeg(bancoForm);setEditBanco(false);},style:{background:'linear-gradient(135deg,#0d4a8a,#1a7acc)',border:'none',borderRadius:12,padding:'0.8rem',color:'#fff',fontSize:'0.9rem',cursor:'pointer',fontFamily:'inherit',fontWeight:600}},'Guardar cuenta bancaria')
+        ):h('div',{style:{fontSize:'0.85rem',color:'#b0c8b0',lineHeight:2.1}},
+          bancNeg.cuenta?h(Fragment,null,
+            bancNeg.nombre&&h('div',null,'Titular: '+bancNeg.nombre),
+            bancNeg.banco&&h('div',null,'Banco: '+bancNeg.banco+(bancNeg.tipo?' - '+bancNeg.tipo:'')),
+            h('div',{style:{color:'#f0ebe0',fontWeight:700}},'Cuenta: '+bancNeg.cuenta),
+            bancNeg.email&&h('div',null,'Email: '+bancNeg.email)
+          ):h('div',{style:{color:'#5a7a5a',fontStyle:'italic'}},'Sin datos bancarios aun. Toca Editar para agregar tu cuenta.')
+        )
+      ),
 
       // Panel Maestro: ficha completa del cliente + datos editables
       maestro&&h('div',{style:{padding:'0 1rem 7rem'}},
